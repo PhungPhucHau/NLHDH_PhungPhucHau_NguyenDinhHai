@@ -1,4 +1,4 @@
-# NLHDH_PhungPhucHau_NguyenDinhHai
+# NLHDH
 4.3 Code Reading Questions
 
 4.3.1 Thread questions

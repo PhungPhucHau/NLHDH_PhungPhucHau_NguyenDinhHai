@@ -1,0 +1,200 @@
+#include <thread.h>
+#include <test.h>
+#include <synch.h>
+
+#include <wchan.h>
+
+struct lock *lockquad0;
+struct lock *lockquad1;
+struct lock *lockquad2;
+struct lock *lockquad3;
+
+struct lock *getlock(int destQuadrant);
+
+struct whalemating
+{
+	volatile int num_male_whale;
+	volatile int num_female_whale;
+	volatile int num_matchmaker_whale;
+	struct wchan *male_wchan;
+	struct wchan *female_wchan;
+	struct wchan *matchmaker_wchan;
+	struct wchan *match_wchan;
+	volatile int match_found;
+	struct lock *lock;
+	volatile int match_male;
+	volatile int match_female;
+};
+struct whalemating *whale_mating;
+
+// the top of the corresponding driver code.
+
+
+void whalemating_init() {
+
+	whale_mating = kmalloc(sizeof(struct whalemating));
+	if (whale_mating == NULL)
+	{
+		return;
+	}
+	whale_mating->male_wchan = wchan_create("name");
+	if (whale_mating->male_wchan == NULL)
+	{
+		kfree(whale_mating);
+		return;
+	}
+	whale_mating->female_wchan = wchan_create("name");
+	if (whale_mating->female_wchan == NULL)
+	{
+		wchan_destroy(whale_mating->male_wchan);
+		kfree(whale_mating);
+		return;
+	}
+	whale_mating->matchmaker_wchan = wchan_create("name");
+	if (whale_mating->matchmaker_wchan == NULL)
+	{
+		wchan_destroy(whale_mating->male_wchan);
+		wchan_destroy(whale_mating->female_wchan);
+		kfree(whale_mating);
+		return;
+	}
+	whale_mating->match_wchan = wchan_create("name");
+	if (whale_mating->matchmaker_wchan == NULL)
+		{
+			wchan_destroy(whale_mating->male_wchan);
+			wchan_destroy(whale_mating->female_wchan);
+			wchan_destroy(whale_mating->match_wchan);
+			kfree(whale_mating);
+			return;
+		}
+	whale_mating->lock = lock_create("name");
+	if (whale_mating->lock == NULL)
+	{
+		wchan_destroy(whale_mating->male_wchan);
+		wchan_destroy(whale_mating->female_wchan);
+		wchan_destroy(whale_mating->matchmaker_wchan);
+		wchan_destroy(whale_mating->match_wchan);
+		kfree(whale_mating);
+		return;
+	}
+	whale_mating->num_male_whale = 0;
+	whale_mating->num_female_whale = 0;
+	whale_mating->num_matchmaker_whale = 0;
+	whale_mating->match_found=0;
+	whale_mating->match_male=0;
+	whale_mating->match_female=0;
+
+
+   return;
+ }
+ 
+  // care if your problems leak memory, but if you do, use this to clean up.
+  
+void whalemating_init() {
+ void whalemating_cleanup() {
+	wchan_destroy(whale_mating->male_wchan);
+	wchan_destroy(whale_mating->female_wchan);
+	wchan_destroy(whale_mating->matchmaker_wchan);
+	wchan_destroy(whale_mating->match_wchan);
+	lock_destroy(whale_mating->lock);
+	kfree(whale_mating);
+   return;
+ }
+
+//male
+
+male(void *p, unsigned long which)
+ 	struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
+   (void)which;
+   lock_acquire(whale_mating->lock);
+ male_start();
+	// Implement this function
+
+ while(whale_mating->num_male_whale>=1)
+ {
+   wchan_lock(whale_mating->male_wchan);
+   lock_release(whale_mating->lock);
+   wchan_sleep(whale_mating->male_wchan);
+   lock_acquire(whale_mating->lock);
+ }
+ whale_mating->num_male_whale++;
+ wchan_wakeall(whale_mating->match_wchan);
+ while(!(whale_mating->match_found==1))
+ {
+	 wchan_lock(whale_mating->match_wchan);lock_release(whale_mating->lock);wchan_sleep(whale_mating->match_wchan);lock_acquire(whale_mating->lock);
+ }
+ whale_mating->match_male=1;
+ male_end();
+ lock_release(whale_mating->lock); 
+  
+//female
+
+female(void *p, unsigned long which)
+ 	struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
+   (void)which;
+lock_acquire(whale_mating->lock);
+   female_start();
+   // Implement this function
+
+   while(whale_mating->num_female_whale>=1)
+   {
+    wchan_lock(whale_mating->female_wchan);lock_release(whale_mating->lock);wchan_sleep(whale_mating->female_wchan);lock_acquire(whale_mating->lock);
+   }
+   whale_mating->num_female_whale++;
+   wchan_wakeall(whale_mating->match_wchan);
+   while(!(whale_mating->match_found==1))
+   {
+  	 wchan_lock(whale_mating->match_wchan);lock_release(whale_mating->lock);wchan_sleep(whale_mating->match_wchan);lock_acquire(whale_mating->lock);
+   }
+  whale_mating->match_female=1;
+   female_end();   
+   lock_release(whale_mating->lock);   
+    
+   V(whalematingMenuSemaphore);
+   return;
+ }
+ 
+ //matchmaker
+ 
+ void
+ matchmaker(void *p, unsigned long which)
+ {
+ 	struct semaphore * whalematingMenuSemaphore = (struct semaphore *)p;
+   (void)which;
+  lock_acquire(whale_mating->lock);
+  matchmaker_start();
+  while(whale_mating->num_matchmaker_whale>=1)
+ {
+     wchan_lock(whale_mating->matchmaker_wchan);lock_release(whale_mating->lock);wchan_sleep(whale_mating->matchmaker_wchan);lock_acquire(whale_mating->lock);
+  }
+  whale_mating->num_matchmaker_whale++;
+  wchan_wakeall(whale_mating->match_wchan);
+  while((whale_mating->num_male_whale == 0) || (whale_mating->num_female_whale == 0))
+  {
+	  wchan_lock(whale_mating->match_wchan);lock_release(whale_mating->lock);wchan_sleep(whale_mating->match_wchan);lock_acquire(whale_mating->lock);
+  }
+  whale_mating->match_found=1;
+  wchan_wakeall(whale_mating->match_wchan);
+  while(whale_mating->match_male!=1 || whale_mating->match_female!=1)
+  {
+  lock_release(whale_mating->lock);
+  lock_acquire(whale_mating->lock);
+  }
+  whale_mating->match_male=0;
+  whale_mating->match_female=0;
+  whale_mating->num_male_whale--;
+  whale_mating->num_female_whale--;
+  whale_mating->num_matchmaker_whale--;
+
+  wchan_wakeall(whale_mating->male_wchan);
+  wchan_wakeall(whale_mating->female_wchan);
+  wchan_wakeall(whale_mating->matchmaker_wchan);
+
+	// Implement this function
+  whale_mating->match_found=0;
+  matchmaker_end();
+  lock_release(whale_mating->lock);
+  
+   V(whalematingMenuSemaphore);
+   return;
+}

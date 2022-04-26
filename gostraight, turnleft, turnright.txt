@@ -1,0 +1,489 @@
+#include <types.h>
+#include <lib.h>
+#include <test.h>
+#include <thread.h>
+#include <synch.h>
+
+struct cv *NWcv;
+struct cv *NEcv;
+struct cv *SWcv;
+struct cv *SEcv;
+struct cv *numcars;
+struct lock *NWlock;
+struct lock *NElock;
+struct lock *SWlock;
+struct lock *SElock;
+struct lock *templock;
+
+int NWregion = 0;
+int NEregion = 0;
+int SEregion = 0;
+int SWregion = 0;
+int firstrun = 0;
+int carlimit = 0;
+
+#define NCARS 20
+
+
+static const char *directions[] = { "N", "E", "S", "W" };
+
+static const char *msgs[] = {
+        "approaching:",
+        "region1:    ",
+        "region2:    ",
+        "region3:    ",
+        "leaving:    "
+};
+
+enum { APPROACHING, REGION1, REGION2, REGION3, LEAVING };
+
+static void
+message(int msg_nr, int carnumber, int cardirection, int destdirection)
+{
+        kprintf("%s car = %2d, direction = %s, destination = %s\n",
+                msgs[msg_nr], carnumber,
+                directions[cardirection], directions[destdirection]);
+}
+
+static
+void
+gostraight(unsigned long cardirection,
+           unsigned long carnumber)
+{      
+        (void) cardirection;
+        (void) carnumber;
+        int cardestination;
+    
+    if (cardirection==0){
+        cardestination = 2; 
+        message(APPROACHING, carnumber, cardirection, cardestination); 
+
+        lock_acquire(NWlock); 
+		
+        while (NWregion==1){ 
+            cv_wait(NWcv,NWlock); 
+        }
+        NWregion = 1;
+        message(REGION1,carnumber,cardirection,cardestination);
+        NWregion = 0;
+
+        lock_acquire(SWlock); 
+        while (SWregion==1){ 
+            cv_wait(SWcv,SWlock); 
+        }
+
+        SWregion = 1;
+        message(REGION2,carnumber,cardirection,cardestination);
+        SWregion = 0;
+
+        if (NWcv->count!=0)
+			cv_signal(NWcv,NWlock);
+        lock_release(NWlock);
+		if (SWcv->count!=0)
+            cv_signal(SWcv,SWlock);
+        
+        message(LEAVING,carnumber,cardirection,cardestination);
+        
+        lock_release(SWlock);
+        
+        
+    }
+    else if (cardirection==1){
+        cardestination = 3;
+        message(APPROACHING, carnumber, cardirection, cardestination);
+        
+        lock_acquire(NElock);
+        while (NEregion==1){
+            cv_wait(NEcv,NElock);
+        }
+        NEregion = 1;
+        message(REGION1,carnumber,cardirection,cardestination);
+        NEregion = 0;
+        
+        lock_acquire(NWlock);
+        while (NWregion==1){
+            cv_wait(NWcv,NWlock);
+        }
+        NWregion = 1;
+        
+        message(REGION2,carnumber,cardirection,cardestination);
+        
+        NWregion = 0;
+
+        if (NEcv->count!=0)
+			cv_signal(NEcv,NElock);
+        lock_release(NElock);
+		if (NWcv->count!=0)
+            cv_signal(NWcv,NWlock);
+        
+        message(LEAVING,carnumber,cardirection,cardestination);
+        
+        lock_release(NWlock);
+        
+        
+    }
+    else if (cardirection==2){
+        cardestination = 0;
+        message(APPROACHING, carnumber, cardirection, cardestination);
+        
+        lock_acquire(SElock);
+        while (SEregion==1){
+            cv_wait(SEcv,SElock);
+        }
+        SEregion = 1;
+        message(REGION1,carnumber,cardirection,cardestination);
+        SEregion = 0;
+        
+        lock_acquire(NElock);
+        while (NEregion==1){
+            cv_wait(NEcv,NElock);
+        }
+        NEregion = 1;
+
+        message(REGION2,carnumber,cardirection,cardestination);
+        
+        NEregion = 0;
+
+        if (SEcv->count!=0)
+			 cv_signal(SEcv,SElock);
+        lock_release(SElock);
+		if(NEcv->count!=0){
+           
+            cv_signal(NEcv,NElock);
+        }
+        message(LEAVING,carnumber,cardirection,cardestination);
+        
+        lock_release(NElock);
+        
+        
+    }
+    else if (cardirection==3){
+        cardestination = 1;
+        message(APPROACHING, carnumber, cardirection, cardestination);
+        
+        lock_acquire(SWlock);
+        while (SWregion==1){
+            cv_wait(SWcv,SWlock);
+        }
+        SWregion = 1;
+        message(REGION1,carnumber,cardirection,cardestination);
+        SWregion = 0;
+
+        lock_acquire(SElock);
+        while (SEregion==1){
+            cv_wait(SEcv,SElock);
+        }
+        SEregion = 1;
+        
+        message(REGION2,carnumber,cardirection,cardestination);
+                SEregion = 0;
+        if (SWcv->count!=0)
+			cv_signal(SWcv,SWlock);
+        lock_release(SWlock);
+		if(SEcv->count!=0){
+            
+            cv_signal(SEcv,SElock);
+        }
+		message(LEAVING,carnumber,cardirection,cardestination);
+		
+        lock_release(SElock);
+        
+        
+    }
+}
+static
+void
+turnleft(unsigned long cardirection,
+         unsigned long carnumber)
+{
+        (void) cardirection;
+        (void) carnumber;
+        int cardestination;
+    
+    if (cardirection==0){
+        cardestination = 1;
+        
+        message(APPROACHING, carnumber, cardirection, cardestination);
+        
+        lock_acquire(NWlock);
+        while (NWregion==1){
+            cv_wait(NWcv,NWlock);
+        }      
+        NWregion = 1;
+        message(REGION1,carnumber,cardirection,cardestination);
+        NWregion = 0;
+        
+        
+
+        lock_acquire(SWlock);
+        while (SWregion==1){
+            cv_wait(SWcv,SWlock);
+        }
+		SWregion = 1;
+        message(REGION2,carnumber,cardirection,cardestination);
+        SWregion = 0;
+            if (NWcv->count!=0)
+                cv_signal(NWcv,NWlock);
+            lock_release(NWlock);
+        
+        
+        lock_acquire(SElock);
+        while (SEregion==1){
+            cv_wait(SEcv,SElock);
+        }
+		
+        SEregion = 1;
+        message(REGION3,carnumber,cardirection,cardestination);
+        SEregion = 0;
+            if(SWcv->count!=0)
+                cv_signal(SWcv,SWlock);
+            lock_release(SWlock);
+        if (SEcv->count!=0){
+            cv_signal(SEcv,SElock);
+        }
+        message(LEAVING,carnumber,cardirection,cardestination);
+        lock_release(SElock);
+        
+        
+    }
+    else if (cardirection==1){
+        cardestination = 2;
+        message(APPROACHING, carnumber, cardirection, cardestination);
+        
+        lock_acquire(NElock);
+        while (NEregion==1){
+            cv_wait(NEcv,NElock);
+        }
+        NEregion = 1;
+        message(REGION1,carnumber,cardirection,cardestination);
+        NEregion = 0;
+        
+        
+        
+        lock_acquire(NWlock);
+        while (NWregion==1){
+            cv_wait(NWcv,NWlock);
+        }
+        NWregion = 1;
+        message(REGION2,carnumber,cardirection,cardestination);
+        NWregion = 0;
+        if (NEcv->count!=0)
+            cv_signal(NEcv,NElock);
+        lock_release(NElock);
+        
+        
+        
+        lock_acquire(SWlock);
+        while (SWregion==1){
+            cv_wait(SWcv,SWlock);
+        }
+        SWregion = 1;
+        message(REGION3,carnumber,cardirection,cardestination);
+        SWregion = 0;
+        if(NWcv->count!=0)
+            cv_signal(NWcv,NWlock);
+        lock_release(NWlock);
+        if(SWcv->count!=0){
+            cv_signal(SWcv,SWlock);
+        }
+
+		message(LEAVING,carnumber,cardirection,cardestination);
+        lock_release(SWlock);
+        
+        
+    }
+    else if (cardirection==2){
+        cardestination = 3;
+        message(APPROACHING, carnumber, cardirection, cardestination);
+        
+        lock_acquire(SElock);
+        while (SEregion==1){
+            cv_wait(SEcv,SElock);
+        }
+        SEregion = 1;
+        message(REGION1,carnumber,cardirection,cardestination);
+        SEregion = 0;
+        
+        
+        
+        lock_acquire(NElock);
+        while (NEregion==1){
+            cv_wait(NEcv,NElock);
+        }
+        NEregion = 1;
+        message(REGION2,carnumber,cardirection,cardestination);
+        NEregion = 0;
+        if (SEcv->count!=0)
+            cv_signal(SEcv,SElock);
+        lock_release(SElock);
+        
+        
+        
+        lock_acquire(NWlock);
+        while (NWregion==1){
+            cv_wait(NWcv,NWlock);
+        }
+        NWregion = 1;
+        message(REGION3,carnumber,cardirection,cardestination);
+        NWregion = 0;
+        if(NEcv->count!=0)
+            cv_signal(NEcv,NElock);
+        lock_release(NElock);
+        
+        if(NWcv->count!=0){
+            cv_signal(NWcv,NWlock);
+        }
+        message(LEAVING,carnumber,cardirection,cardestination);
+        lock_release(NWlock);
+        
+        
+    }
+    else if (cardirection==3){
+        cardestination = 0;
+        message(APPROACHING, carnumber, cardirection, cardestination);
+        
+        lock_acquire(SWlock);
+
+        while (SWregion==1){
+            cv_wait(SWcv,SWlock);
+        }
+        SWregion = 1;
+        message(REGION1,carnumber,cardirection,cardestination);
+        SWregion = 0;
+        
+        
+        
+        lock_acquire(SElock);
+        while (SEregion==1){
+            cv_wait(SEcv,SElock);
+        }
+        SEregion = 1;
+        message(REGION2,carnumber,cardirection,cardestination);
+        SEregion = 0;
+        if (SWcv->count!=0)
+            cv_signal(SWcv,SWlock);
+        lock_release(SWlock);
+        
+        
+       
+        lock_acquire(NElock);
+        while (NEregion==1){
+            cv_wait(NEcv,NElock);
+        }
+        NEregion = 1;
+        message(REGION3,carnumber,cardirection,cardestination);
+        NEregion = 0;
+        if(SEcv->count!=0)
+            cv_signal(SEcv,SElock);
+        lock_release(SElock);
+        if( NEcv->count!=0){
+            cv_signal(NEcv,NElock);
+        }
+        message(LEAVING,carnumber,cardirection,cardestination);
+        lock_release(NElock);
+        
+        
+    }
+}
+
+static
+void
+turnright(unsigned long cardirection,
+          unsigned long carnumber)
+{
+        (void) cardirection;
+        (void) carnumber;
+    
+        if (cardirection==0){ 
+		message(APPROACHING, carnumber, cardirection, 3);          
+		lock_acquire(NWlock); 
+            
+            while (NWregion==1){ 
+                cv_wait(NWcv,NWlock); 
+            }
+
+			
+			NWregion = 1; 
+            
+
+            message(REGION1,carnumber,cardirection,3);
+            
+            
+
+            NWregion = 0;
+            
+            if (NWcv->count!=0)
+                cv_signal(NWcv,NWlock); 
+				
+			message(LEAVING,carnumber,cardirection,3);	
+            lock_release(NWlock); 
+
+            
+        }
+        else if (cardirection==1){
+            message(APPROACHING, carnumber, cardirection, 0);	
+            lock_acquire(NElock);
+    	    
+            
+            while (NEregion==1){
+                cv_wait(NEcv,NElock);
+            }
+			
+			
+            NEregion = 1;
+            
+            message(REGION1,carnumber,cardirection,0);
+            
+			NEregion=0;
+			
+            if (NEcv->count !=0){
+                cv_signal(NEcv,NElock);
+            }
+            
+            message(LEAVING,carnumber,cardirection,0);
+            lock_release(NElock); 
+			
+        }
+        else if (cardirection==2){
+   		message(APPROACHING, carnumber, cardirection, 1);            
+	    lock_acquire(SElock);
+            
+            while (SEregion==1){
+                cv_wait(SEcv,SElock);
+            }
+            
+			SEregion = 1;
+         
+            message(REGION1,carnumber,cardirection,1);
+            
+            SEregion = 0;
+		   
+            if (SEcv->count!=0)
+                cv_signal(SEcv,SElock);
+            
+            message(LEAVING,carnumber,cardirection,1);
+            lock_release(SElock); 
+		
+        else if (cardirection==3){
+		message(APPROACHING, carnumber, cardirection, 2);          
+	    lock_acquire(SWlock);
+             
+            while (SWregion==1){
+                cv_wait(SWcv,SWlock);
+            }
+            
+            SWregion = 1; 
+            message(REGION1,carnumber,cardirection,2);
+           
+
+            SWregion = 0;
+			
+            
+            if (SWcv->count!=0)
+                cv_signal(SWcv,SWlock); 
+				
+			message(LEAVING,carnumber,cardirection,2);	
+            lock_release(SWlock); 
+        }
+    
+}
